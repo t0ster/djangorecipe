@@ -213,7 +213,8 @@ class Recipe(object):
         script_paths = []
 
         # Create the Django management script
-        script_paths.extend(self.create_manage_script(extra_paths, ws))
+        if self.options.get('control-script') != 'false':
+            script_paths.extend(self.create_manage_script(extra_paths, ws))
 
         # Create the test runner
         script_paths.extend(self.create_test_runner(extra_paths, ws))
@@ -355,20 +356,22 @@ class Recipe(object):
             zc.buildout.easy_install.script_template = \
                 zc.buildout.easy_install.script_header + \
                     script_template[protocol]
-            if self.options.get(protocol, '').lower() == 'true':
+            script_name = self.options.get(protocol, 'false').lower()
+            if script_name == 'true':
+                script_name = '%s.%s' % (
+                    self.options.get('control-script', self.name), protocol)
+            if self.options.get(protocol, '').lower() != 'false':
                 project = self.options.get('projectegg',
                                            self.options['project'])
                 scripts.extend(
                     zc.buildout.easy_install.scripts(
-                        [('%s.%s' % (self.options.get('control-script',
-                                                      self.name),
-                                     protocol),
+                        [(script_name,
                           'djangorecipe.%s' % protocol, 'main')],
                         ws,
                         self.options['executable'],
                         self.options['bin-directory'],
                         extra_paths=extra_paths,
-                        arguments= "'%s.%s', logfile='%s'" % (
+                        arguments="'%s.%s', logfile='%s'" % (
                             project, self.options['settings'],
                             self.options.get('logfile'))))
         zc.buildout.easy_install.script_template = _script_template
