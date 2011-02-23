@@ -5,6 +5,7 @@ import urllib2
 import shutil
 import logging
 import re
+import hashlib
 
 from zc.buildout import UserError
 import zc.recipe.egg
@@ -192,7 +193,12 @@ class Recipe(object):
         if os.path.exists(location):
             shutil.rmtree(location)
 
-        if self.is_svn_url(version):
+        # If we would like to install custom django fork,
+        # django-nonrel for instance
+        if self.is_custom_url(version):
+            tarball = self.get_custom_release(version, download_dir)
+            self.install_release(version, download_dir, tarball, location)
+        elif self.is_svn_url(version):
             self.install_svn_version(version, download_dir, location,
                                      self.install_from_cache)
         else:
@@ -260,7 +266,6 @@ class Recipe(object):
 
         shutil.copytree(download_location, location)
 
-
     def install_release(self, version, download_dir, tarball, destination):
         extraction_dir = os.path.join(download_dir, 'django-archive')
         setuptools.archive_util.unpack_archive(tarball, extraction_dir)
@@ -282,6 +287,22 @@ class Recipe(object):
 
             tarball_f = open(tarball, 'wb')
             f = urllib2.urlopen(download_url % version)
+            tarball_f.write(f.read())
+            tarball_f.close()
+            f.close()
+        return tarball
+
+    def get_custom_release(self, download_url, download_dir):
+        version = hashlib.md5(download_url).hexdigest()
+        tarball = os.path.join(download_dir, 'django-%s.tar.gz' % version)
+
+        # Only download when we don't yet have an archive
+        if not os.path.exists(tarball):
+            self.log.info("Downloading Django from: %s" % (
+                    download_url))
+
+            tarball_f = open(tarball, 'wb')
+            f = urllib2.urlopen(download_url)
             tarball_f.write(f.read())
             tarball_f.close()
             f.close()
@@ -383,6 +404,14 @@ class Recipe(object):
         svn_version_search = re.compile(
             r'^(http|https|svn|svn\+[a-zA-Z-_]+)://|^(trunk)$').search(version)
         return svn_version_search is not None
+
+    def is_custom_url(self, version):
+        # Search if there is custom django download url,
+        # https://bitbucket.org/wkornewald/django-nonrel/get/8c522baea1bf.tar.gz
+        # for instance
+        custom_version_search = re.compile(
+            r'^(http|https)://.+tar.gz$').search(version)
+        return custom_version_search is not None
 
     def version_to_svn(self, version):
         if version == 'trunk':
